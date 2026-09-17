@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IVA SMS Forwarder Bot - Cookie Based Version
+IVA SMS Forwarder Bot - Enhanced Cookie Based Version
 """
 import os
 import json
@@ -16,10 +16,9 @@ BOT_TOKEN     = "8899248836:AAEkcaRRn5p2-Ly0P8hR2kRXqK8Q9huBWxI"
 GROUP_CHAT_ID = -1003919009698
 
 BASE_URL     = "https://www.ivasms.com"
-# সঠিক Live SMS পেজের URL
 SMS_LIVE_URL = f"{BASE_URL}/portal/live/my_sms"
 
-# আপনার সংগৃহীত কুকি দুটো
+# আপনার কুকি
 IVAS_SESSION = "eyJpdiI6IkdQQU9Wb0k5Yjd1cS9qZFJJQklFWnc9PSIsInZhbHVlIjoiQkRiVUxFNzJ2bVZUSEZQVHFlQnNxNkJKS1Z0Q1dFdnc4eC9CZk02VnZKdGIyVG5RRGVEY0owM3RaNjBmVzNqU2I5bGhGTHBRRXU4eGs5R2plbDBJdDVqcjBsVlhqejROT2FDNW5nTUZNZU9pVzRiSTNuM2JOelM0UFRGajN2alMiLCJtYWMiOiJkNDFlYWE3OWM4M2FjZjU3MmJkZTY3ODQzZDUwZmNjZjE4NTAzN2IwMjEyNDdkMTY3Y2Q3ZjFiNmQ1NzVlZTc5IiwidGFnIjoiIn0%3D"
 XSRF_TOKEN   = "eyJpdiI6IlZnQldtU3lwakhsY3JTWFI5S1lLVXc9PSIsInZhbHVlIjoibG1IL1M5RkxDSStEczd5NEFWc3I3RzhhY2x6VVNNMzJtNmU0QS91cDZvUEtGeDJhdnBDbHE5QUFtSTBhR2FiRGpHaXBHaVZvS1Z1ajVNakhYL1N5U2M0T1dqMWVnbjUvMzN2ZkVuTm00dmZXRDg4eWlIbUdBRXQ2TFA5U1lnNlIiLCJtYWMiOiI3ODNlZDRjNWMzMWE4NzNhZTUyMGZlMzBkOGJmOGRhYjRkY2JkMDhkMjk1MzAzZDJjNDExNDZhMDg4MThjZWJlIiwidGFnIjoiIn0%3D"
 
@@ -54,7 +53,8 @@ class IVACookieSession:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Cookie': cookie_header,
-            'Referer': BASE_URL
+            'Referer': BASE_URL,
+            'X-Requested-With': 'XMLHttpRequest'
         })
 
     def fetch_sms(self):
@@ -66,22 +66,33 @@ class IVACookieSession:
                 return [], "EXPIRED"
 
             soup = BeautifulSoup(res.text, 'html.parser')
-            rows = soup.find_all('tr')
             results = []
             
+            # পেজের সমস্ত টেবিল রো বা কন্টেইনার পার্স করা
+            rows = soup.find_all('tr')
             for row in rows:
-                tds = row.find_all('td')
-                if len(tds) < 2:
+                text_content = row.get_text(separator=" ", strip=True)
+                if not text_content or "Message content" in text_content:
                     continue
                 
-                row_data = [td.text.strip().replace('\n', ' ') for td in tds]
-                full_text = " | ".join(row_data)
-                
-                uid = str(hash(full_text))
+                # ইউনিক আইডি তৈরি
+                uid = str(hash(text_content))
                 results.append({
                     'id': uid,
-                    'full_text': full_text
+                    'full_text': text_content
                 })
+
+            # যদি <tr> দিয়ে কাজ না হয়, বিকল্প হিসেবে ডিভ টেক্সট চেক করা
+            if not results:
+                for div in soup.find_all(['div', 'li']):
+                    text_content = div.get_text(separator=" ", strip=True)
+                    if "Mot de passe" in text_content or "code" in text_content.lower():
+                        uid = str(hash(text_content))
+                        results.append({
+                            'id': uid,
+                            'full_text': text_content
+                        })
+
             return results, "OK"
         except Exception as e:
             return [], str(e)
@@ -97,7 +108,7 @@ async def monitor_account_task(app: Application):
                 try:
                     await app.bot.send_message(
                         chat_id=GROUP_CHAT_ID,
-                        text="⚠️ <b>IVASMS Session Cookie Expired!</b>\nPlease update the cookie in your code.",
+                        text="⚠️ <b>IVASMS Session Cookie Expired!</b>\nPlease update cookies in code.",
                         parse_mode="HTML"
                     )
                 except Exception:
@@ -131,7 +142,7 @@ async def monitor_account_task(app: Application):
         await asyncio.sleep(MONITOR_INTERVAL)
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ IVA SMS Cookie Bot Active!")
+    await update.message.reply_text("✅ IVA SMS Bot Active!")
 
 async def post_init(application: Application):
     asyncio.create_task(monitor_account_task(application))
@@ -142,5 +153,5 @@ if __name__ == "__main__":
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start_cmd))
 
-    logger.info("🚀 IVA Cookie Forwarder Bot Starting...")
+    logger.info("🚀 IVA Forwarder Bot Starting...")
     app.run_polling(close_loop=True)
