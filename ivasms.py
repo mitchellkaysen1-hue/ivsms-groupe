@@ -18,7 +18,7 @@ from telegram.error import BadRequest
 # ==================== CONFIGURATION ====================
 BOT_TOKEN       = "8899248836:AAEkcaRRn5p2-Ly0P8hR2kRXqK8Q9huBWxI"
 GROUP_CHAT_ID   = -1003919009698
-ADMIN_IDS       = {6579362453, 8653648506}
+ADMIN_IDS       = {6394277892}
 
 BASE_URL     = "https://www.ivasms.com"
 SMS_LIVE_URL = f"{BASE_URL}/portal/live/my_sms"
