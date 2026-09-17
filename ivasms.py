@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IVA SMS Forwarder Bot - Enhanced Cookie Based Version
+IVA SMS Forwarder Bot - API / Dynamic JSON Version
 """
 import os
 import json
@@ -53,8 +53,9 @@ class IVACookieSession:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Cookie': cookie_header,
-            'Referer': BASE_URL,
-            'X-Requested-With': 'XMLHttpRequest'
+            'Referer': SMS_LIVE_URL,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01'
         })
 
     def fetch_sms(self):
@@ -65,33 +66,35 @@ class IVACookieSession:
                 logger.error("❌ Cookie expired!")
                 return [], "EXPIRED"
 
-            soup = BeautifulSoup(res.text, 'html.parser')
             results = []
-            
-            # পেজের সমস্ত টেবিল রো বা কন্টেইনার পার্স করা
-            rows = soup.find_all('tr')
-            for row in rows:
-                text_content = row.get_text(separator=" ", strip=True)
-                if not text_content or "Message content" in text_content:
-                    continue
-                
-                # ইউনিক আইডি তৈরি
-                uid = str(hash(text_content))
-                results.append({
-                    'id': uid,
-                    'full_text': text_content
-                })
 
-            # যদি <tr> দিয়ে কাজ না হয়, বিকল্প হিসেবে ডিভ টেক্সট চেক করা
+            # ১. সরাসরি JSON রেসপন্স ফিল্টারিং
+            try:
+                data = res.json()
+                items = data if isinstance(data, list) else data.get('data', [])
+                for item in items:
+                    msg = str(item.get('message', item.get('content', '')))
+                    number = str(item.get('number', item.get('phone', '')))
+                    sid = str(item.get('sid', item.get('service', '')))
+                    
+                    if msg:
+                        full_info = f"{number} | {sid} | {msg}".strip(" |")
+                        uid = str(hash(full_info))
+                        results.append({'id': uid, 'full_text': full_info})
+            except Exception:
+                pass
+
+            # ২. ব্যাকআপ HTML/Table টেক্সট ফিল্টারিং
             if not results:
-                for div in soup.find_all(['div', 'li']):
-                    text_content = div.get_text(separator=" ", strip=True)
-                    if "Mot de passe" in text_content or "code" in text_content.lower():
-                        uid = str(hash(text_content))
-                        results.append({
-                            'id': uid,
-                            'full_text': text_content
-                        })
+                soup = BeautifulSoup(res.text, 'html.parser')
+                rows = soup.find_all(['tr', 'div', 'li'])
+                for row in rows:
+                    text = row.get_text(separator=" ", strip=True)
+                    # আসল SMS এর টেক্সট কি-ওয়ার্ড ফিল্টার
+                    if any(key in text.lower() for key in ['passe', 'code', 'mot de', 'confirmation', 'betwinner', 'facebook']):
+                        if "message content" not in text.lower():
+                            uid = str(hash(text))
+                            results.append({'id': uid, 'full_text': text})
 
             return results, "OK"
         except Exception as e:
