@@ -16,8 +16,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from telegram.error import BadRequest
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN       = "8857125228:AAFyjVG763OHfn9Z6X0j3X5PbVzkMreUDjE"
-GROUP_CHAT_ID   = -1004372723640
+BOT_TOKEN       = "8899248836:AAEkcaRRn5p2-Ly0P8hR2kRXqK8Q9huBWxI"
+GROUP_CHAT_ID   = -1003919009698
 ADMIN_IDS       = {6579362453, 8653648506}
 
 BASE_URL     = "https://www.ivasms.com"
