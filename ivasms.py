@@ -16,14 +16,16 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from telegram.error import BadRequest
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN       = "8899248836:AAEkcaRRn5p2-Ly0P8hR2kRXqK8Q9huBWxI"
-GROUP_CHAT_ID   = -1003919009698
-ADMIN_IDS       = {6394277892}
+BOT_TOKEN       = "8857125228:AAFyjVG763OHfn9Z6X0j3X5PbVzkMreUDjE"
+GROUP_CHAT_ID   = -1004372723640
+
+# আপনার টেলিগ্রাম আইডি সহ সব অ্যাডমিন আইডি এখানে দিন
+ADMIN_IDS       = {6579362453, 8653648506}
 
 BASE_URL     = "https://www.ivasms.com"
 SMS_LIVE_URL = f"{BASE_URL}/portal/live/my_sms"
 
-# আপনার আপডেট হওয়া কুকি
+# আপনার আপডেট হওয়া কুকি (প্রয়োজন অনুযায়ী নতুন কুকি চেঞ্জ করবেন)
 IVAS_SESSION = "eyJpdiI6IkdQQU9Wb0k5Yjd1cS9qZFJJQklFWnc9PSIsInZhbHVlIjoiQkRiVUxFNzJ2bVZUSEZQVHFlQnNxNkJKS1Z0Q1dFdnc4eC9CZk02VnZKdGIyVG5RRGVEY0owM3RaNjBmVzNqU2I5bGhGTHBRRXU4eGs5R2plbDBJdDVqcjBsVlhqejROT2FDNW5nTUZNZU9pVzRiSTNuM2JOelM0UFRGajN2alMiLCJtYWMiOiJkNDFlYWE3OWM4M2FjZjU3MmJkZTY3ODQzZDUwZmNjZjE4NTAzN2IwMjEyNDdkMTY3Y2Q3ZjFiNmQ1NzVlZTc5IiwidGFnIjoiIn0%3D"
 XSRF_TOKEN   = "eyJpdiI6IlZnQldtU3lwakhsY3JTWFI5S1lLVXc9PSIsInZhbHVlIjoibG1IL1M5RkxDSStEczd5NEFWc3I3RzhhY2x6VVNNMzJtNmU0QS91cDZvUEtGeDJhdnBDbHE5QUFtSTBhR2FiRGpHaXBHaVZvS1Z1ajVNakhYL1N5U2M0T1dqMWVnbjUvMzN2ZkVuTm00dmZXRDg4eWlIbUdBRXQ2TFA5U1lnNlIiLCJtYWMiOiI3ODNlZDRjNWMzMWE4NzNhZTUyMGZlMzBkOGJmOGRhYjRkY2JkMDhkMjk1MzAzZDJjNDExNDZhMDg4MThjZWJlIiwidGFnIjoiIn0%3D"
 
@@ -150,7 +152,7 @@ def save_databases():
     with open(DB_COUNTRY_MAP,  "w") as f: json.dump(DEFAULT_COUNTRY_MAP, f, indent=2)
     with open(DB_SERVICE_META, "w") as f: json.dump(DEFAULT_SERVICE_META, f, indent=2)
 
-# ==================== COOKIE SCRAPER ====================
+# ==================== COOKIE SCRAPER (FIXED) ====================
 class IVACookieFetcher:
     def __init__(self):
         self.session = requests.Session()
@@ -174,17 +176,21 @@ class IVACookieFetcher:
 
             for row in rows:
                 tds = row.find_all('td')
-                if len(tds) < 3:
+                # ওয়েবসাইটের ৫টি কলাম সঠিক ভাবে রিড করার লজিক
+                if len(tds) < 5:
                     continue
 
                 if "Message content" in row.get_text():
                     continue
 
+                # ১ নম্বর কলাম: Country + Number
                 recipient = tds[0].text.strip().replace('\n', ' ')
+                # ২ নম্বর কলাম: SID (Service Name)
                 sender    = tds[1].text.strip() if len(tds) > 1 else 'Unknown'
-                message   = tds[-1].text.strip().replace('\n', ' ')
+                # ৫ নম্বর কলাম (tds[4]): Message Content
+                message   = tds[4].text.strip().replace('\n', ' ')
 
-                if recipient:
+                if recipient and message:
                     results.append({
                         'recipient': recipient,
                         'sender': sender,
