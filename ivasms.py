@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-IVA SMS Forwarder Bot - API / Dynamic JSON Version
-"""
 import os
+import re
 import json
 import logging
 import asyncio
@@ -46,6 +44,15 @@ def save_seen():
     except Exception as e:
         logger.error(f"DB Save Error: {e}")
 
+def extract_code(msg_text):
+    match = re.search(r'\b\d{4,8}\b', msg_text)
+    if match:
+        return match.group(0)
+    match_pass = re.search(r'Pass\s*:?\s*(\S+)', msg_text, re.IGNORECASE)
+    if match_pass:
+        return match_pass.group(1)
+    return "N/A"
+
 class IVACookieSession:
     def __init__(self):
         self.session = requests.Session()
@@ -54,47 +61,45 @@ class IVACookieSession:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Cookie': cookie_header,
             'Referer': SMS_LIVE_URL,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json, text/javascript, */*; q=0.01'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         })
 
     def fetch_sms(self):
         try:
             res = self.session.get(SMS_LIVE_URL, timeout=15)
-            
             if "login" in res.url.lower():
-                logger.error("❌ Cookie expired!")
                 return [], "EXPIRED"
 
+            soup = BeautifulSoup(res.text, 'html.parser')
             results = []
+            rows = soup.find_all('tr')
 
-            # ১. সরাসরি JSON রেসপন্স ফিল্টারিং
-            try:
-                data = res.json()
-                items = data if isinstance(data, list) else data.get('data', [])
-                for item in items:
-                    msg = str(item.get('message', item.get('content', '')))
-                    number = str(item.get('number', item.get('phone', '')))
-                    sid = str(item.get('sid', item.get('service', '')))
-                    
-                    if msg:
-                        full_info = f"{number} | {sid} | {msg}".strip(" |")
-                        uid = str(hash(full_info))
-                        results.append({'id': uid, 'full_text': full_info})
-            except Exception:
-                pass
+            for row in rows:
+                tds = row.find_all('td')
+                if len(tds) < 3:
+                    continue
+                
+                row_text = row.get_text()
+                if "Message content" in row_text:
+                    continue
 
-            # ২. ব্যাকআপ HTML/Table টেক্সট ফিল্টারিং
-            if not results:
-                soup = BeautifulSoup(res.text, 'html.parser')
-                rows = soup.find_all(['tr', 'div', 'li'])
-                for row in rows:
-                    text = row.get_text(separator=" ", strip=True)
-                    # আসল SMS এর টেক্সট কি-ওয়ার্ড ফিল্টার
-                    if any(key in text.lower() for key in ['passe', 'code', 'mot de', 'confirmation', 'betwinner', 'facebook']):
-                        if "message content" not in text.lower():
-                            uid = str(hash(text))
-                            results.append({'id': uid, 'full_text': text})
+                full_str = " ".join([td.text.strip() for td in tds])
+                
+                # টেবিল সেল থেকে ডাটা এক্সট্র্যাক্ট
+                number = tds[0].text.strip().replace('\n', ' ')
+                service = tds[1].text.strip() if len(tds) > 1 else "Unknown"
+                message = tds[-1].text.strip().replace('\n', ' ')
+
+                code = extract_code(message)
+                uid = str(hash(f"{number}_{message}"))
+
+                results.append({
+                    'id': uid,
+                    'number': number,
+                    'service': service,
+                    'message': message,
+                    'code': code
+                })
 
             return results, "OK"
         except Exception as e:
@@ -111,7 +116,7 @@ async def monitor_account_task(app: Application):
                 try:
                     await app.bot.send_message(
                         chat_id=GROUP_CHAT_ID,
-                        text="⚠️ <b>IVASMS Session Cookie Expired!</b>\nPlease update cookies in code.",
+                        text="⚠️ <b>IVASMS Session Cookie Expired!</b>\nPlease update cookie in code.",
                         parse_mode="HTML"
                     )
                 except Exception:
@@ -123,11 +128,14 @@ async def monitor_account_task(app: Application):
                 if sms['id'] not in global_seen:
                     global_seen.add(sms['id'])
                     save_seen()
-                    logger.info("📩 New SMS Found! Forwarding...")
+                    logger.info("📩 Forwarding SMS...")
                     
                     text = (
                         f"🎯 <b>SMS RECEIVED IN YOUR NUMBER!</b>\n\n"
-                        f"💬 <code>{sms['full_text']}</code>"
+                        f"👤 <b>Number:</b> <code>{sms['number']}</code>\n"
+                        f"✉️ <b>Service:</b> {sms['service']}\n"
+                        f"💬 <b>Message:</b> {sms['message']}\n\n"
+                        f"🔑 <b>Code:</b> <code>{sms['code']}</code>"
                     )
                     
                     try:
